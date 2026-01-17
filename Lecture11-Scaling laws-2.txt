@@ -1,0 +1,719 @@
+Stanford CS336 Language Modeling from Scratch | Spring 2025 | Lecture 17: Alignment - RL 2
+OK.
+So let's get started. Today is the second and last of the scaling laws lectures.
+And today it's going to be a little bit more of a case study and details-oriented lecture.
+I'm going to cover two separate things. The first one is I'm going to go through a couple of papers
+where people have done careful scaling law studies as part of their model building. And I'm going to use that as a way to convey to you how
+modern language model builders use scaling laws as part of their design process.
+So motivation from last time and today is, what's the best practice for scaling a large model.
+We want to have large language models with nice hyperparameters and good architecture choices.
+And I've already told you about Chinchilla, and using scaling laws to validate some of this. But I think you should have rightfully skeptical questions
+about scaling laws. It's curve fitting on a log, log plot, is it really as good as I said it was last lecture?
+So does Chinchilla's approach to scaling laws actually work? You're finding this out in your assignments.
+If you fit an isoflop, is that really telling you about the right token trade-offs? Can you use this stuff to really set optimal learning rates?
+And should we be picking particular architectures or parameterizations to scale nicely?
+So the last paper or the newest paper we talked about with lots of detailed scaling
+studies in last lecture was the DeepMind Chinchilla paper. And after that, ChatGPT happened.
+And the competitive landscape of large language model building really changed. And people just stopped publishing anything
+about data, and scaling, and all these things. It was very secretive.
+I've talked to people at some of the frontier labs before and ask them oh, what are you guys doing for scaling.
+And they're like, no, you will not tell you anything about what we do for scaling. And so we have to rely on other sources for how
+scaling happens in practice. And there have been several competently executed large scale
+models that have done scaling. And so last year in this lecture,
+I covered Cerebras-GPT, DeepSeek LLM, and MiniCPM. And as a nice side note, last year,
+I had to really strongly justify why I was covering these Chinese models, so to speak. But this year, thankfully, hopefully you're
+all already excited to hear about DeepSeek rather than me trying to convince you that this is the right thing to listen to.
+In the years since then, I've looked at a lot of the models that have come out.
+Actually the hall in terms of new scaling law insights and papers is actually much sparser.
+I'll briefly mention some results from Llama 3, which came out at the later end of last year.
+Hunyuan-Large, which is a MoE model from China, and then MiniMax 01, which is a linear time hybrid attention
+model, or long context model that came out this year. And all three of those have some scaling studies, but really
+nothing quite as extensive as DeepSeek or MiniCPM which have really been the gold standard, I think,
+for modern scaling law studies. So that's one part of what I want to talk about today.
+I want to make sure you guys have an understanding of what scaling looks like in a real semi-production model.
+And the other thing I want to talk about, which is an important deep dive, I think, is the mu P method that I mentioned last time.
+So mu P is this approach, just as a recap of last lecture,
+is when we train these models, as we make them bigger, we need to change certain hyperparameters.
+On the left hand side of this plot here, you see that as you make models wider, in this case, like an MLP, you make them wider,
+the optimum learning rate shifts downwards. So you need smaller learning rates for these bigger models.
+And that's a really big problem potentially because then you need to hyperparameter tune your learning rates at the very
+large scale, and that's going to be very computationally expensive. It's going to be a huge problem.
+On the other hand, if we could parameterize our model differently so that the learning rate that's optimal
+just stayed the same forever across all the scales, that's great. That's really simplified our search process.
+We would like all of our hyperparameters and really choices, in general, to remain stable across scales.
+That's the ideal. And mu P is a very interesting class of approaches. And it teaches us some pretty interesting ways
+of thinking about the problem. So I'm going to actually go through some of the details in the math. In the years since-- last time I taught this,
+there were a couple of very nice tutorials on mu P that came out, so I'm going to follow those because they have math
+that's pretty easy to follow. And then I'll talk about some work that has come out doing third party validation and evaluation of mu
+P style methods. OK. The focus of the first part of this lecture,
+which is the case study, is going to be on three models. I talked about three additional more modern models,
+but actually the details in those are much more sparse. And I think the lessons you learn are primarily
+from these three papers here. So that's going to be my focus for the first part of this lecture. So I'm going to talk about Cerebras-GPT, MiniCPM,
+and DeepSeek. And each one of these will have actually a pretty different mix of scaling strategies, and it'll also
+have different things to teach us about how to get scaling right. So we'll get started.
+Cerebras-GPT is the first of the models and scaling things
+that I want to talk about. It's a large family of models. It's trained 0.1 to 13 billion parameter models, trained
+with the Chinchilla recipe, so roughly the same number of token to parameter counts as is optimal.
+And they have an interesting core finding. The Cerebras folks actually are pretty
+interested in a lot of these scaling and parameterization studies. And they have a really interesting core finding,
+which is they scale up this mu P thing that I mentioned before, and they find that it makes scaling
+a lot more stable and a lot more pleasant to deal with. And just to show you the punchline, you've got test loss on the pile,
+and you've got the scaling curves here of the Cerebras-GPT in blue. This is with standard parameterization.
+You've got mu P in orange. This is the model that they also train with using the maximal update parameterization.
+And they show that it scales more nicely, if not better, than things like Pythia or GPT-J. So that's nice.
+And the thing that I want to emphasize here is that this is one of the few, if not first, public validations
+of mu P. We know that all of or most of the labs that are doing LLM scaling pay close attention to how they parameterize
+their networks, their initializations, as a function of the scale of the model, as well as things like per layer learning rates
+are things that people pay close attention to make scaling much more stable. And so things like mu P are pretty important in this space.
+104, for example, the paper for that isn't out and I don't know if it will be out, but they talk about a technique they call meta P, which
+is a variant of this as well. So what they show is that when they
+train models using standard parameterization, they find that they have big oscillations
+around the predicted scaling point. So that's this dashed line. They have oscillations due to the fact
+that, for example, they have to adjust the learning rate as a function of scale. And so it's hard for them to really get
+the predicted performance exactly right, which is this dashed line using their scaling recipe.
+On the other hand, what they find is if you have the three risk GPT, sorry, mu P scaling,
+then you get this orange line, which is much, much closer to the scaling law fit for this mu P version.
+And so their claim here, at least, is that using this alternative parameterization allows them to get much more predictable scaling, much more
+nice hyperparameter tuning. We're going to see this in more detail. I'll return to this slide again once I've
+gone through the mathematical derivation of mu P. But in case you're ever interested in implementing
+this thing, some of the Cerebras-GPT folks, and in general, the artifacts that the serious research
+folks are putting out is very, very helpful for mu P because they have this big table in the appendix that really just
+tells you exactly the difference between the standard initialization and parameterization or SP and the maximum update version or mu P.
+And you'll see that-- I'll just give you the one liner version. Basically, every nonembedding parameter
+is initialized with 1 over the width. And then the learning rates per layer are scaled down by 1 over the width
+So the interesting difference from standard parameterization, even if you're already doing 1 over width
+scaling on the initialization, is actually there's per layer learning rates that are different. And I'm going to get to that later.
+I'm going to do a full derivation of this result. But you can see here this nice quick reference.
+And also if you want to implement this thing, this gives you very easy ways of implementing mu P.
+Another interesting thing that we also see in some of the other scaling strategies is that you combine these strategies
+like mu P which makes hyperparameter selection stable with very, very aggressive scaling. So what they do here is they scale down
+their experiments all the way down to 40 million parameters. They do extensive hyperparameter search on this proxy model.
+And then they scale things back up using mu P to try to keep hyperparameters as stable as possible.
+And so this is what they see in their small scale hyperparameter search. Each one of these dots is a model run.
+And there's a hyperparameter associated with each one of these. And then they pick the minimum across these runs,
+giving them essentially their hyperparameter grid. This is a very clean approach to hyperparameter selection.
+It's unclear whether this level of aggressive scaling down is really what you want to do if you want to train these really,
+really large models. But this is a one strategy that we see also in many CPM and DeepSeek, like, training
+much smaller surrogate models, and then trying to figure out how to stably scale them back up. And that's going to be a theme that we see throughout.
+And yeah, if folks have questions, please stop me. Actually, maybe I'll stop here for a moment in case anyone
+has questions for this Cerebras-GPT piece, although maybe it'll be clearer once I
+talk about the derivation later in this lecture.
+There's another paper I want to talk about, MiniCPM, or another artifact, I guess.
+And for whatever reason, I think MiniCPM hasn't been talked about quite as much,
+especially in Western academic circles. But at least for me, this was one of the first releases
+or papers I saw coming out of a Chinese research group where they had done some really cool in-depth scaling
+and other research. It really felt like stuff coming out of the frontier. And to give you an overview of what they do,
+their goals here is they want to train relatively small language models, but use a lot of compute to train really
+good small language models. That's their ostensible goal. And in doing so, they do a lot of careful scaling computations.
+They also once again use mu P to stabilize and simplify scaling when they end up scaling these models not in size, but in terms
+of the amount of data. And to try to convince you that this is a paper worth following,
+at the time that they were trained, this was a remarkably good 1.2 to 2.4B models.
+It beats out most of the 2B models that were out there, and it matched many of the modern 7B models,
+at least modern as of 2024 standards. I mean, now, of course, you've got even better 7B models.
+The arms race is fierce. But this should give you a sense that at least given the amount of compute and technology
+available back in mid-2024, this was actually really at the frontier. And they did something right to get models of this quality.
+And so much like Cerebras-GPT, essentially, they have to have some strategy to get scaling right.
+So stepping back right you're going to do a really big model run. What do you have to do, you have to pick hyperparameters.
+You have to make sure those hyperparameters scale nicely, and then you scale up your model. So we can do the same thing as the Cerebras-GPT folks.
+We can try to pick hyperparameters at a small scale, hope that they stay stable, and then scale everything up.
+And the way to do that would be to use something like mu P. And this has exactly the same strategy at play here, you see.
+So for embedding, you don't really do anything, you just scale it by a constant. Whenever you have some of residual connection like an MLP,
+you scale it by the square root of the number of layers. You initialize it by 1 over the base width.
+And then, the learning rates are also scaled by the width of the model.
+And we see basically the same strategy or the same scaling factors appear as the Cerebras-GPT case.
+And they also end up with very similar parameters as Cerebras-GPT, the same scale embeddings,
+similar learning rates off by a factor of two or so. But generally, you end up in similar places
+as these hyperparameters. And then what you do is once you have this,
+you're relying on your optimum learning rates to remain stable. So you're just going to keep those roughly fixed.
+And we know that the aspect ratio is a pretty important thing, so we just fixed that after figuring out
+what the right one is. And then you scale up the overall model size going all the way from 9 or 30
+M, all the way to 0.5 or one billion parameter models. And so what they have is a roughly 5x or maybe a little bit
+more compute savings going from the smallest models that they've got to the largest pilot run models that they have.
+And now, you can use this, and then you can figure out whether you have optimal batch
+sizes as a function of scale. So you want to figure out B crit, which is the critical batch size.
+If you remember correctly, this is-- the critical batch size is roughly the diminishing returns point.
+So as models get bigger, their losses get lower. As their loss gets lower, you can make use of bigger and bigger batch sizes.
+So the critical batch size is roughly telling you for the given model size and scale that I'm operating at, what is the appropriate global batch
+size for me to be training these models with. And so much like the Kaplan paper,
+they follow a similar recipe. The plots look different from the Kaplan paper, but the underlying strategy is the same.
+What they're trying to figure out is what is the critical batch size for training or the optimal batch size, in this case,
+for training different models. And they're trying to find relatively predictable scaling relationships between the batch size,
+and, for example, the data size, or the loss size. And vertical columns here represent a single training
+curve. And then the quadratics are being fitted to try to identify the minimum.
+So the red line here is the minimum across all of these points as we go upwards.
+And this is trying to tell us the optimum batch size for a particular choice of model size and data set size.
+And then at this point, you can follow the same logic as the Kaplan paper for identifying the batch sizes.
+Basically, you reproduce the same plot. If you remember the Kaplan paper and the critical batch size
+discussion from two lectures ago, if not can pull up the lecture slides, you'll remember that basically, the thing that's
+highly predictable is the loss that you're trying to train to, the terminal loss, and the batch size of--
+the critical batch size point. And so we see that, once again, much like in Kaplan, you see a log linear relationship
+here between the target loss or the terminal loss and the batch size that you want.
+And so from this, you can figure out what batch size you're going to get because if you have a particular target scale,
+you can use scaling loss to figure out what is the loss that I expect to get. Once you know the loss that you expect to get,
+you can use that to back out what batch size you can operate at. So there's a fairly clean trend, polynomially increase the batch
+size as loss decreases. Now, batch sizes do shift around as a function of target loss
+and thus compute. So we have to fit a scaling law for that guy. But we already did mu P. And so in theory, if the approach works
+at all, what we should now get is we should get that the optimum learning rate here is stable.
+So on this plot, we're seeing essentially different model sizes from small models in the light colors
+to their biggest models in the dark colors. And you see them varying different learning rates.
+The big models are only running for a little bit for compute reasons. But what you see is a fairly clear trend.
+And once again, very consistent with some of the earlier results that we've seen in Kaplan et al where you have a relatively
+wide basin and then sharp increases as your model becomes very unstable. But the important thing here is that the minimum
+remains fixed across relatively large orders of magnitude. From your small model to the big model,
+the minimum, or at least tied with the minimum, is at the exact same point at roughly 10
+to the negative 2 learning rate. And so this is a nice piece of evidence
+or some validation that properly scaling your model initialization and properly scaling your per layer learning
+rates allow you to avoid tuning learning rates over and over,
+or even fitting scaling laws on learning rates in order to try to predict what the optimal learning rate is.
+And then the final thing is you might
+want to figure out essentially model size to data trade-offs. If you're training small models, you're
+going to be probably overtraining your models, or at least you want to justify to yourself why you're training on so many tokens,
+and so you might want to replicate something like the Chinchilla analysis. So the MiniCPM people had a really cool or nice innovation.
+Others have done similar things, but I think they were the first to really popularize this in the LLM setting, especially
+in the context of Chinchilla style scaling is the following. So let's say I want to fit a Chinchilla scaling law.
+When I do that, what do I need to do? Well, I need to vary the number of tokens,
+and I need to vary model sizes. And so when I do that, I'm going to fix a model size, and I'm going to train a model for longer and longer.
+It would be nice if I could of early stop and take the checkpoints of this model, and have that be the difference or changes to the data set size.
+Because earlier checkpoints see less data, it would be nice if I could use a single run to collect all
+of this data scaling things. Unfortunately, what I'm showing here is that the cosine learning rates for different data targets
+are different. So if you have a very small amount of data, you have a cosine that goes up very quickly or sorry,
+that goes up, the warmup is always the same, but a very fast cool down. You train for a little bit and then you come down very quickly.
+If you have a lot of data, then you're going to very slowly come down to the end. And so your learning rates between a small data training
+run and a big data training run will be different. This is a very, very key point. Lots of people get tripped up by this.
+You cannot use a single run of a cosine learning rate model and try to get early checkpoints and reason about data scaling
+behavior based on that. This bites people all the time. And so in order to avoid this, what you would normally
+need to do is you need to train a model from start to every single endpoint. So you have to train it to every single target.
+And so this takes you to n squared runs. Some of the runs are small, but you have to basically run lots of runs, each one with a target
+termination point rather than using a single run and collecting checkpoints. It feels senseless that we have to do this.
+So the MiniCPM folks popularized this idea of a WSD or warm-up
+stable decay learning rate. And so this plot on the left really shows you what's going on here.
+Normally what we would train with is something that looks like this cosine learning rate shown in yellow here.
+It goes up. There's a warm period, usually very short to get to your full learning rate.
+And then there's a cosine that goes all the way down to a termination point, and maybe you stay at your minimum learning rate.
+This is all, of course, optional. You might terminate here as well. You might go all the way to 0. And so cosine learning rate looks like this.
+And the issue here, of course, is that if I have a different target, the cosine is going to be totally different. So everything past the warmup can't be reused.
+Now, if you look at this new WSD, which is basically a trapezoid learning rate, what it has is three phases.
+It's got a warmup phase that's the same as the cosine, it's got a stable phase that's flat, and then it's got a decay phase that
+rapidly cools down the model down to its minimum learning rate. And of course, you can variations of this. You can go up, down, and then stay stable at your minimum.
+You can do any of these variations. But I think in general, the simplest form to think about is warmup, stable, decay, terminate.
+Why is this nice? This is nice because you can reuse the stable part. So the thing that you do is if you
+want to do Chinchilla in almost one run, what you do is you warmup, you have a stable run
+all the way to the end, and then you cool down. And then if you want to figure out oh, how would my model have been if I used less data,
+you rewind the checkpoints and then you do another down. And now you've got an exact warmup stable decay
+learning rate shape without having done the training from the beginning. So this is a very nice thing. The fact that the stable part essentially is flat
+allows you to do Chinchilla style scaling or data scaling in a single training run, or for mostly the cost
+of a single training run. And a lot of people now do this. OK.
+So they work very well. MiniCPM, I think, popularized this. And I think a lot of people have since then adopted it.
+And we see a lot of WSD style schedules in many, many places.
+You see curves that look this. If you have a cosine learning rate schedule, you'll see essentially, relatively predictable
+smooth decay towards your terminal loss like this yellow line here. If you train with WSD, you'll see much, much funkier learning
+curves that look like the curves that I have here above them, the darker lines. So you've got your warmup phase, which doesn't really
+show up in this training curve. It's so short. Then you've got your stable phase where it goes down normally.
+And then as soon as you hit your decay phase, like the cool down part, your loss really rapidly drops off
+until you've hit your either 0 or minimum learning rate point, at which point you've gotten your terminal loss
+So these losses may look very disturbing to you, but they are actually pretty normal when
+you're training with these rapid cool down learning curves. And maybe the point to make here is at every single token count,
+you see that the warmup stable decay curve, the minimum point, beats or matches the cosine learning rate.
+But that's not always the case. There can sometimes be cases where cosine works better or WSD works better.
+But in general, I think a lot of the, I think, things that people say here is that the two learning rates are roughly comparable,
+but WSD has the additional nice advantage that you don't have to worry about your termination point. You can repeatedly cool down to get check points
+of different data counts.
+Cool. And then of course, there's other things that have appeared for trying to estimate Chinchilla curves.
+Some folks, a collaboration of like U-Dub, formerly U-Dub-- and Apple folks, had this paper
+on estimating the Chinchilla penalty. That is when you keep adding more and more data,
+how much worse is your loss than if you had scaled according to Chinchilla? So you have your teal line here, which
+is M equals 20 tokens to parameters. And you can think about, OK, what
+happens if I train with 320 tokens to parameters. Well, then you have a separate parallel scaling line.
+And then you have another line, which is the circles, which is, what if I train with 640 or the darker one is there.
+And so the thing that they show is actually instead of doing this WSB style thing, another thing you could do is you could try to figure out, OK,
+how much does my model degrade as a function of higher tokens to parameter ratios?
+Well, that turns out also to have a fairly predictable shape. And you can extrapolate that based on degradation
+at small training runs. I don't think I've seen large scale training runs using this idea. But it's an additional cool thing
+to know that essentially could do Chinchilla in almost one training run by extrapolating the access token penalty
+at a small scale as well. So OK, going back to MiniCPM.
+Now, we have the tools that we need. We have the WSB learning rate, which allows us to essentially do one training run.
+And that one training run allows us to have both variations. Sorry, that one training run allows
+us to vary data as we go along. And then we have multiple training runs for different model sizes, that gives us all that we
+need to do Chinchilla analysis. And they use method 1 and method 3, if you remember what those are.
+Method 1 is you overlay all of the learning curves, and you take the lower envelope. And the lower envelope of all the training curves
+is supposed to be roughly a power law. And then method 3 is you basically jointly
+fit this equation 2 you have here, you hypothesize this two variable scaling law,
+and you fit it to all the data that you have and curve fitting style fashion. And then that allows you to solve for the optimum token
+to data ratio through that fit. So they do both of that.
+They do see for Chinchilla method 1, fairly clear, although not perfectly linear trends
+that allow them to essentially go from compute to token ratios.
+And their primary approach that they use to justify a lot of their design decisions is the method 3.
+It's the curve fitting. So the contours that you see here is the curve that they fit. The dots that they have here is the small scale
+runs that they did to fit the Chinchilla parameters. And just to justify what they do,
+they find very, very high token to parameter ratios, like so high that I feel like this is an outlier that
+doesn't really agree very closely with most of the other literature. They argue that Llama style architecture should all
+have a higher ratio because of improved data quality and improved model efficiency, but their token to parameter ratio estimates
+are really, really high. 192 tokens per parameter, which I don't think I've seen anyone else derive.
+I think other people have done replications of Chinchilla. I don't think anyone's ever really done or argued
+for 192 tokens to parameter. Regardless, we have seen that recent models like Llama 3
+have significantly higher data to model ratios. We also don't really see diminishing returns. These models aren't way worse than the equivalent Chinchilla
+scaled like Llama 2 models. This suggests that with careful optimization and careful tuning,
+we should be able to go far beyond the 20 times model size rule of thumb. So if there's one thing you take away
+from this set of these last two slides, maybe not necessarily that you should
+trust whatever scaling law fits that MiniCPM did, but rather that the Chinchilla analysis isn't really
+a strong constraint. 20 times model size is just a starting point, you should be feeling free to significantly increase
+that token to parameter ratio. Finally, the curve fits that they get are generally
+pretty good looking. So this is the scaling law curves for essentially data and model size scaling
+and perplexities on code in English. They do have some really weird outliers that I don't really understand why they get these.
+But the fitted scaling laws are generally pretty good as they increase the amount of data on their relatively
+small model. So this is one example of a large scale training run scaling
+recipe. So I'll stop here. Things like WSD are probably new to you.
+So if you have any questions, please feel free to ask or any of the other bits including like the Chinchilla replication and mu P and so on.
+Oh, OK. Sure. [INAUDIBLE] just like the main adaptation of [INAUDIBLE] in terms of initializing the weight
+of parameters [INAUDIBLE]. So the question was the main change in mu P was initialization.
+So there's two things that will happen when you derive and you implement mu P. One of them
+will be the initialization will change, and the other thing will be that the learning rate changes-- or the learning rate changes per layer.
+And that is probably a more exotic object than many of you are used to. The initialization actually is not that different.
+If you're already using a standard like, Kaiming style initialization, that's already 1 over the fanin--
+1 over-- sorry, 1 over the square root of the fanin, which is going to be already the right thing.
+Whereas the learning rate normally like-- unless you're doing something really exotic, you're using a global constant learning rate everywhere.
+So that's going to be a big difference from what you're normally training with. So you can think of that as the practical difference for a lot
+of the mu P implementations. Yes. [INAUDIBLE] I think that was kept constant
+[INAUDIBLE] He saw that the curve was very close to the cosine decay [INAUDIBLE].
+So you're talking about this curve. And you're saying like oh, when we're in the stable phase of WSD, when we're up here,
+the curve remains pretty close, and why is that. Well, it's close, but also not really.
+If you look at this last curve over here, there's a big gap before we enter the decay
+phase between cosine and WSD. And I think this is one of the pretty interesting mysteries
+about deep learning optimizers. Clearly you need a stable phase to get you
+far from your initialization. But also, the cool down phase is what gets you most of your gains and your losses.
+If you don't cool down, this is a gigantic loss in your losses. So the cool down is actually really critical.
+And a lot of the gains from cosine versus here, this relative gap, this is all from cool down.
+And so a lot of the optimizer learning rate design is about this balance between how
+do I keep learning rates high to travel far from my initialization, but still have good decay on my learning rate
+to be able to anneal my loss down to a very low value.
+So the other paper I want to talk about is DeepSeek. This is the original DeepSeek LLM paper from 2024.
+And in many ways, if you read the original DeepSeek LLM paper, you can know that these are very serious science people
+because they do a lot of very careful scaling ablations, and they're really trying to get it right when they scale up.
+And that's an attitude that's shared amongst the players that get scaling right.
+So they have 7 and 67B parameter models. At the time, very high performance
+relative to Llama, which is really the primary competitor at the time. And at the time, I guess, Llama 2 and Mistral
+were the big players, DeepSeek comes in and they're able to match the performance. Not quite the flashy impact of DeepSeek
+v3 coming in and matching OpenAI's GPT 4.0.
+But for a first time attempt, this is a pretty remarkable result. And so let's dig in and try to understand,
+what did DeepSeek do that allowed them to go from essentially 0 to at least
+for open source state of the art at the time. And I think DeepSeek more than most other players, maybe
+the only comparable one being MiniCPM is very, very open about a lot of the experiments they did
+and the approach they used to choose a lot of these hyperparameters. So immediately we see one difference between DeepSeek v1
+and MiniCPM, and also Cerebras-GPT, which is that they don't use any mu P.
+And they're going to directly try to estimate both the optimal batch size and the optimal learning rate.
+So it's like a really direct method, you might call it, and requires a strong belief in scaling laws.
+So what they do is they take two relatively small models,
+and they run a grid over different batch sizes, they run a grid over different learning rates,
+and they get losses across this grid. They do the same thing at a larger scale.
+And you can get the optimum batch size and learning rate. And so they're saying all right, well, this
+is a pretty wide basin, so we don't maybe have to be too scared about messing this up.
+And so then what they do is they know that the choice of learning rate and batch size are both relatively forgiving, but we
+do want to get the order of magnitude of these things correct. So how do we get the order of magnitude of these things correct?
+Well, what we're going to do is we're going to train a bunch of models with different amounts
+of nonembedding flops, and we're going to change essentially
+across a grid the parameters that I had before, both the batch size and the learning rate.
+And by varying these, we're going to have the optimum batch size and the optimum learning rate,
+sorry, across these different scales. So you can imagine basically making these grids across many different flops scales,
+and basically marking down a star for each one. Perhaps unsurprisingly, because it's a scaling law lectures,
+these things seem to follow a scaling law line. At least for the batch size things seem more clear.
+And you can fit a line to here, and you can extrapolate out to the big models that you're going to train what your optimal batch sizes should look like.
+They do the same thing with learning rate. And they fit this line and they say, oh, these are the two learning rates we're going to use.
+It might be because the points are being plotted on top of each other. But I find this line to be particularly-- not particularly,
+somewhat suspicious looking. I mean, I could probably fit a horizontal line, and that would have also looked OK.
+This one, I don't know. Even as a scaling law enthusiast, I'm not quite sure.
+I would bet my life on this one to pick the learning rate. But they did, and that's how they get the learning rate.
+Now, they also follow best practices at the time. They do a Chinchilla style analysis.
+And they use, once again, a WSD style learning rate, where they are trying to essentially minimize
+the amount of repeated work that they do. They do something a little bit weird or a little bit more
+nonstandard where what they're doing is they do warmup, they do stable, and then they do two sets of decay steps decaying
+down to 0. So it's like two decay phases consisting of 10% plus 10%.
+And they analyze different choices of that decay phase. And they doesn't seem to matter very much.
+But generally speaking, it's about 20% of the total compute budget is going to be spent on that cool down phase.
+And so they also show once again that it matches cosine learning rates. But once again, the advantage here is that we can do Chinchilla style analysis for very cheap.
+In contrast to the learning rate-- sorry, learning rate fits, Chinchilla style analysis just
+fits really, really cleanly. I think this is a broad lesson. When you look at lots of people scaling laws,
+I think the stuff on hyperparameters always looks a little noisy and tenuous.
+But the isoflops analysis from all of the players look always very, very nice.
+And so this is replication of the Chinchilla result. You see different compute scales.
+We see different quadratics. We draw a line through the bottom of the quadratics. We get exactly the optimum of--
+I'm sorry, optimum flops per token and optimum token size as a function of training flops.
+So this gives us a very straightforward way of analyzing the token size to model size trade-offs.
+And this allows them to do everything from scratch, of course, I think. As a side commentary, I think it's really nice that they're
+redoing a lot of this. They could have certainly cargo culted Chinchilla and just pick 20 tokens per parameter.
+But they said no, let's actually go and do the scaling law analysis, and let's actually make sure that the token sizes are relatively appropriate for us.
+And then they have a fitted scaling law at the very end.
+This is-- in some ways unsurprising because this is after they fixed their scaling strategy. They do predictable scaling.
+They try to predict what happens on the 7B and the 67B models. It's unsurprising in many ways, but very nice
+that they're able to extrapolate out from about 10 to the 20-- the 10 to the 24, and actually nail the prediction
+on the basis of the scaling law. So it's a very nice thing to be able to see that we can actually
+get predictive measures of model capabilities
+before we actually train them. So that's the DeepSeek part. Anyone have questions for the DeepSeek strategy
+and what they did and any of the other pieces? I think most of this, I think-- WSD was probably the newest thing that I've mentioned today.
+The other thing that DeepSeek does is directly fitting a scaling law on to the optimum learning rate and batch sizes rather than using something
+like mu P. Yes. Do they have a global learning rate for all the [INAUDIBLE]?
+Do they have a global learning rate? Yes. Yeah. So the tuning that global learning.
+Cool. OK. Yeah. Once we know the [INAUDIBLE] for any frontier model [INAUDIBLE].
+Yeah. So the question was like, do people redo this analysis for new frontier models?
+To be honest, I'm not actually sure. And I am beginning to think that a lot of people maybe don't exactly replicate some of this, because we see
+that in the newer papers, just increasingly less scaling details. Even from DeepSeek, for example, like DeepSeek v2 and v3,
+we see a lot of emphasis on the new parts of each paper. So for DeepSeek v2, we see a lot of emphasis
+on MLA and the architectural improvements. In the DeepSeek v3, we see a lot of the systems components being
+emphasized, like the low bit training. But we don't see, for example, in either of those, any additional new scaling law studies.
+And so I think my guess is that there's not much new there. Maybe they're replicating it just to make sure it works,
+but nothing new to report. And I think that will be captured in the next couple
+slides where I'm going to talk about scaling laws and papers and models from the last year or so.
+So I did a little brief survey. But actually, there's nothing that is at the level of detail of either MiniCPM or DeepSeek
+Those are really still, I think, the most detailed open studies into scaling that we have in 2025.
+Cool. OK. So Llama 3 was probably one of the bigger model
+releases in the past year since I last taught this class. And they do have some pretty interesting scaling bits.
+For one, just the question right now of like, do people actually replicate these analyzes
+once they've run them once. Well, yes, Llama 3 redoes the isoflop style scaling--
+Chinchilla scaling laws. And they find roughly that the optimum ratio, if I got the calculation right, is about 39 to 1.
+And I do think this is interesting because Chinchilla got the 20 to 1 parameter ratio.
+I think many of us have trained models at the Chinchilla ratio in our research and so on.
+It's quite clear that the 20 isn't really that stable. Other people that have been fighting it have been getting generally slightly higher ratios
+than before. And that might point to things like improved algorithmic efficiency in architectures
+that learn better from data. It might mean something else, like improved data quality.
+All of those are moving parts. So it's hard to know what's leading to these slightly different ratios.
+But the results seem fairly clear, that the fits are relatively good and they do get a 40 to 1 ratio.
+The other thing which is close to the data scaling stuff that I mentioned, the early parts of my first scaling
+lecture. One of the interesting things that the Llama 3 folks do is they try to essentially compute into NLLS like log loss,
+and then correlate those NLLS back into downstream accuracies. And so the thinking that they're trying to do here
+is they would like to not really scale against log likelihoods, that's not really a thing they truly care about.
+They care about improving, I don't know, benchmark numbers on MMLU, or lambada, or whatever
+other benchmarks that they've decided to hill climb on. And so if that's the case, then what they're going to need
+is to have a conversion factor going from these NLS per character, these perplexities or equivalent to perplexities,
+and then map them into accuracies. And so they've done some studies in Llama 3,
+essentially trying to relate these two fitting sigmoids, showing that if you fit essentially these small models
+and you fit some Llama 2 models and you fit a sigmoid on the whole thing, you can accurately predict the performance of Llama 3 405B on the basis of those fits.
+It's interesting. I think they say that they use these ideas for data selection.
+But I think there's not that much details there. And it's unclear whether this is like a really core object when
+Llama 3 was being trained, or whether this was a side scaling thing that was just of interest to the authors.
+Another recent work that has come out,
+yet another Chinese LLM that's nicely executed is Hunyuan-1.
+Hopefully I didn't really butcher the pronunciation there. They are training MoEs.
+And so because they're training MoEs, they want to redo the Chinchilla style analysis.
+They fit-- once again, they do isoform analysis. They fit quadratics. They figure out the minimums, and then they're
+able to get a different token to parameter ratio. So they a 96 to 1 data to active parameter ratio.
+These ratios are obviously going to be quite different because the training MoEs, there's lots of differences about the architectures.
+We don't really expect the same thing as Chinchilla. And so we do actually see in various papers,
+essentially replications of Chinchilla happen again and again, because a lot of these people are very interested in understanding
+how far can I push the token to parameter size ratio. We would like to stay on the higher end of that,
+have more data than parameters, because then people will actually use our models or our models will be cheap to serve.
+So for all those reasons, people have been replicating Chinchilla. I think this is one of the best replicated results in scaling
+in many ways. The actual 20 to 1 parameter ratio isn't the thing that consistently replicates.
+But the fact that you can do isoflops and fit the minimum and get these very predictable trade-offs in flops
+to optimum parameters is quite clean and consistent
+in the replications. The last one, which is honestly a little bit more
+of an exotic scaling law over the last year is MiniMax-01, which came out pretty recently.
+So MiniMax-01 is a linear time or long context language
+model released by another Chinese startup. And their interest is, well, what
+we're going to do is we're going to take softmax attention, which is quadratic, and they have this thing
+called lightning attention, which is a linear attention or linear yeah, linear attention layer, which is linear time.
+And then they have a hybrid version of this model. And they want to figure out how much cost am I paying in terms of the performance of the model going
+from softmax to linear to hybrid attention. And so they do things like-- they basically replicate method
+one for Chinchilla, where they're looking at the lower envelope of the loss curves. As they train, they look at essentially
+the implied optimal model size and the implied optimal token count as they go. And roughly the conclusion that they draw from this
+is that the lightning and the hybrid models, roughly perform the same as the softmax attention.
+And thus, they're OK to train long context models on the basis of these architectures.
+We've seen these plots occur very often in research papers. If you look at the Mamba paper or the Mamba-2 paper,
+or the delta net paper or any of these other linear time complexity RNN papers, you'll see
+plots that look a lot like this where they say, oh, the full attention scaling and my linear attention
+scaling are basically the same as a function of compute. But this is-- I would say, a rare case of this same plot
+being produced almost at scale from a major artifact release.
+OK. So putting all that together, I know
+that was a bunch of mini case studies that I went through fairly quickly.
+But I want to step back and recap it a little bit. We've seen several common ingredients being
+used in these scaling recipes. We've seen Cerebras, DeepSeek, MiniCPM, and then the few new paper since.
+So Cerebras and MiniCPM both use mu P as a way to make hyperparameters more
+stable across scale, and they-- MiniCPM, especially, has a nice WSD schedule,
+which is a thing they popularize to be able to do Chinchilla style scaling. Cerebras doesn't bother to replicate Chinchilla.
+DeepSeek does a little bit different thing. They assume that most hyperparameters just don't change with scale.
+But they do a full scaling analysis on batch size and learning rate, and then they use the scaling laws as a way
+to figure out optimal scaling. I've already noted that some of the scaling looks a little bit more suspicious than others.
+But really, this is a way to at least get the order of magnitude hopefully right. They use isoflops analysis.
+They replicate Chinchilla once again to figure out the model sizing, and to make sure they're in the right order of magnitude.
+Of the more recent releases, Llama 3 and Hunyuan do isoflops analysis only.
+Llama 3 does a little bit more, but that's basically it. And then MiniMax does the more interesting thing of basically justifying architecture choices
+through the lens of a scaling law. But we see, generally speaking, that there's a few different things that get replicated like Chinchilla,
+and learning rate and batch size are really the things that people are really deeply concerned about when they're scaling models up.
+And they do things like fixed aspect ratio and just scale the total model size up. And that's generally the way that people
+handle a lot of the moving pieces of scaling up.
+Any questions about the case studies pieces? Actually I'm going to stay here and just make sure I've covered any questions that people
+might have.
+OK. Cool. So the second and last part of this lecture
+is going to be understanding mu P. Hopefully through the case studies you've seen that essentially getting
+the learning rate right is one of the core concerns that people have and also the batch size.
+But in general, I think we want to have scale invariant hyperparameters. And it is the case that our choice of initialization
+and our choice of per layer learning rates are essentially arbitrary. There's no reason why we have to initialize
+them one way and not the other. And so if we could manipulate those free variables to get
+scale and variance in our learning rates, that would just be really wonderful. That would make our lives way easier.
+And it would make small scale experiments much more possible. So I'll also talk first through the math
+of this, how it's derived? What's the justification? What are the core conceptual objects behind trying to make models scale predictably?
+And then I want to talk about a pretty nice preprint by an independent researcher on basically just
+a bunch of ablations on mu P. What makes it break? What does a robust do?
+Does it work on a real transformer language model? These questions are explored pretty well in this preprint
+that I'll talk about at the very end here. So OK. What is mu P anyway?
+I feel like maybe I've jumped the gun for the last two lectures because I've mentioned what this is without really
+giving you the core conceptual object that it's based off of. On the other hand, I think I'm justified in doing this
+because I think most of the literature doesn't explain mu P that clearly either. They're just like, yeah, just scale the initialization by 1
+over the width and scale the per layer learning rate by 1 over the width, that's mu P. But I think the ideas behind mu P
+are pretty interesting and worth discussing, because I think they speak to some core objects that recur
+in deep learning in general. So I'm going to be basing my slides off of this preprint
+or paper. If you're interested in reading about mu P, I would point you to this one. I think this and another blog post
+called a practitioner guides to mu P, I think are the two readable descriptions
+of what this paradigm is. So I'm going to base myself off this. The math is, for whatever reason,
+not exactly the same across these different presentations, so I'll clarify that I'm basing the math off of this one.
+So mu P is based off of the following relatively simple ideas. So there's two things that we think
+should happen when we're training a neural network. So when we scalarize a neural network, we're going to make,
+in this case, let's just say only the width, the width of the network bigger. And we're going to fix the layer size or sorry, the depth,
+and then I'm going to make the width bigger as we go. Now if I do that, as I make the width bigger,
+I want the activations at initialization to remain big theta of 1.
+I want it to remain roughly constant bounded above and below by universal constant,
+roughly constant as I make the width bigger. It shouldn't blow up. It shouldn't vanish. Seems like a pretty natural thing to want.
+You don't want your activations to get too big. This is per coordinate. Now, the second assertion I want is
+that I'm going to initialize my model, and I'm going to take a single gradient step. And when I take that single gradient step,
+I want to make sure that the change in activation should also be big theta of 1.
+So both of these seem very natural conditions because if you violate these, it's going to mean that as I make the models bigger,
+either the initial activations will blow up or vanish, or after one gradient step, my activations will
+either blow up or vanish. Those are both bad, bad conditions.
+And as a note, I'm talking about individual activations like coordinates. And so if you're thinking about norms
+of an entire vector of activations, that should look big theta of square root of nl.
+Because each one of these are going to be roughly independent, so the norm is going to look like the square root of the width,
+the number of elements in my width coordinate.
+So I can derive mu P from those two conditions.
+So the first condition, which is that I want my activation to remain stable, imposes constraints
+on the initialization. So I'm going to walk you through a very, very simple example.
+So I'm going to consider a deep linear network. So this is h of l, so this is the activations
+at layer little l. And that's going to be a function of the weight matrix at layer l, and the activations
+from the previous layer. No nonlinearities, no fancy stuff. It's all square.
+Just forget all this complexities. If you want complexities, you can go read the preprint, they will explain in slightly hand-wavy terms
+why those things don't matter. Now, the initialization, I'm going to pick a Gaussian initialization.
+So it's going to be zero-centered. It's going to be a rectangular size of the sizes that depend
+on the sizes of my activations. And then I'm going to have one hyperparameter, which
+is the noise scale of this matrix at this layer. Sorry, there should be a little l on this sigma.
+So now what can we say? Well, I want to understand the size of h of l
+at initialization. So how can we do that? Well, one thing we can do is we can consider the limiting behavior of this system.
+I'm going to take basically little n of l and little n of l minus 1 to infinity.
+And if I do that, this w is going to concentrate. It's a random Gaussian matrix, if you remember
+your random matrix theory. Actually that's not a prerequisite for the course. If you know some basic random matrix theory,
+you know that the operator norm of a Gaussian matrix is going to roughly concentrate to this object.
+It's going to be sigma, which is the noise scale times the square root of both of the coordinates added.
+And importantly, you can write down roughly that this equivalence is true. So the activations at layer l, the norm of that
+is going to be approximately equal to the operator norm of Wl times the activation norm of h of l minus 1.
+And this is roughly assuming that W of l is independent of h of l minus 1, which is true at initialization.
+So I think you can basically make that a right arrow if you'd like. Now, I'm going to say--
+I'm going to pick a particular choice of sigma, which is going to be square root nl over square root nl
+minus 1 times this object. You can simply think of it as this right-hand side thing.
+This is the exact form. This is the more asymptotic form that you can think of this as. But really it's just 1 over the square root
+of the fanin in of your layer times the minimum of one, and the aspect ratio of your model.
+In case your fanin n is much larger than your fanout, then it kicks in.
+So let's say that I pick this sigma, what happens? Roughly 1 over the square root of my fanin.
+So now what happens? I can plug this back in to this formula, the matrix concentration limit and also this approximation
+here. And I can inductively prove that every layer is going to have the right activation size.
+So let's just go through all the layers. And assume that up until layer l minus 1 I have this property
+So that's the inductive assumption at layer l minus 1, I have that my activation norm is square root of nl minus 1.
+OK. So that's just an assumption. Now, if this is true, then I just plug all of these in.
+So I plug-in square root of nl minus 1 into this component into Wl operator norm, I plug-in the limit.
+And then for sigma, I plug-in this expression over here. You see that this inverse cancels this. And then you're going to get exactly that h of l--
+the l2 norm of h of l is equal to square root of n of l. So this is the thing that we wanted because before, remember,
+we said, we want to make sure that the activations remains big theta of 1, which means that the norm should
+be square root of n of l. So that's exactly what we get plus some lower order terms.
+So this is a fairly clear step by step argument that shows you what the right thing to do is.
+For initializations, I want to pick 1 over the square root of the fanin plus a small correction factor, in order to make sure that my activations do not
+blow up at initialization. I'll pause here for a moment in case someone has questions.
+I feel like this is actually maybe the first real math that we've done in the class. So maybe it's a bit of a context switch for people.
+I did not warn you that I was going to talk about a bit of math.
+Is this all relatively clear for people? 1 over square root of fanin. Yes.
+OK. I'm going to assume that everyone's on board with 1 over square root of fanin. So now we're going to derive the second part of mu P.
+So the first part of mu P was about initializations. The second part of mu P is going to be about learning rates.
+And so how are we going to think about learning rates? Well, to think about learning rates, I'm going to look at the second condition.
+The second condition A2 which says, when I take one gradient step past initialization, what needs to happen
+is that my activation-- sorry, my update size needs to remain constant. It can't blow up. It can't vanish.
+So what does that mean? So if I have an update of delta Wl on the weights at layer l,
+where does that come from? Well, that comes from-- let's say I'm doing SGD, that's going to come from this expression.
+It's going to be a learning rate times l which is my loss-- the gradient of l which is my loss, and then the activations
+transposed. In the case that my batch size is 1, this is a rank-one object. This is a rank-one update to delta of l.
+And because it's rank-one, there's a nice easy expression. The change of Wl times the activation of the previous layer
+is equal to the norm of the change in Wl, the operator norm of this thing,
+times the l2 norm of h of l minus 1. And now, combine this with the fact
+that the change in activation at layer l is this expression. You can convince yourself that this is true.
+You can write this out by figuring out what the actual final activation is at layer l
+after the update in canceling out wl h of l which is a shared
+term across left and right. Then you'll get this expression. You'll get that, what is the update in h of l?
+This is the object that we want to keep roughly square root of n of l. The norm of this object.
+So let's look through each of these terms and look at what the magnitude of this is. The first term here wl delta h of l minus 1, this we can assume
+is going to be controlled from the inductive assumption, because this is exactly the delta h of l
+that we have plus the condition A1 argument. Condition A1 basically says--
+sorry, condition A1 is going to say that delta of h of l minus 1 is going to be square root nl, and then wl
+is going to maintain that norm. The more complicated parts is going to be these two arguments, the second and third terms
+that we have here, delta Wl h of l minus 1 and delta Wl delta hl minus 1.
+Sorry, that's quite the mouthful. They all have the same order of magnitude, actually. And the only thing that we need to really figure out
+is this expression here. What is the product of the previous layer's norm times the operator norm of delta Wl,
+because we don't really know how big the update is going to be in the weight matrix W. If we knew that,
+all very straightforward stuff. And so the remaining argument is actually
+relatively straightforward. Even though this is actually a complicated jumble of things,
+the intuition is actually very clear. The intuition for this says, OK, what do I really need to figure out?
+The one thing I really need to figure out is this expression here. How much does the weight at layer l change?
+If I can figure that out, then I can derive all of the relevant quantities and solve for the learning rate.
+At a high level, that's our strategy here. And so how can we possibly figure out
+after one gradient step how much delta Wl moves. That's really the key question.
+Well, there's an additional sneaky assumption that then shows up here. And the assumption is something like this.
+If our learning is well behaved, then after a single gradient step, then the change in the loss, delta of l,
+this quantity has to also be big theta of 1. And why is that? Well, because we don't want the size of our losses,
+the update, the decrease in our losses to blow up or go to 0 as the width goes to infinity.
+We want essentially our improvement in losses to remain roughly the same order of magnitude
+no matter how big our models get. That's a stronger assumption than what we've had before. But assuming that's true, then essentially, we can say,
+OK, the change in the loss is multiplying the gradient with the change in the weights. This left side is O of 1.
+We know how big this delta of l should look like. So now-- or sorry, we know how big this delta Wl looks like.
+Now we can solve for the gradient size. And once we have that, we can plug that in here. We know delta Wl.
+We know the gradient of l. We know the size of h of l from condition A1. And now we can solve for the learning rate.
+And that's exactly what you get at the bottom here. And if you work through the arithmetic,
+the final result that you get here is that the learning rate for SGD is equal to the fanout over the fanin.
+So lots of steps involved and lots of substitution and slightly sketchy big O notation being substituted into the equations here.
+But once we do that, we're going to end up with a very simple formula. Note that this is true for SGD.
+And those of you that have been paying attention and staring at this equation are probably internally complaining.
+You're like, you have misled us because in a transformer, well, what's nl over nl minus 1?
+For an MLP, that actually is like a 4 because you've got a factor of 4 between DFF and D model.
+And so this thing doesn't really change. It's just a constant in most models. Unless your aspect ratios are like dramatically changing
+through your network. The reason why mu P is different from standard parameterization
+is because this derivation is for SGD, where the parameterizations look very similar between mu P
+and SP. If you do the exact same derivation for Adam, you're going to find that actually you're
+going to get slightly different things, which is that it's going to be 1 over the fanin rather than the fanout over the fanin.
+OK. So here's the recap. I have dragged you through, hopefully
+willingly, the derivation of the basic what people call the spectral conditions that define mu P.
+But now I will give you the one slide high level takeaway of that result. So when we want to do something like mu P,
+if we are following the guidelines from before directly, what we will end up with is the following blue box initialization.
+You set yourself to 1 over the square root of fanin times the correction factor that's 1, if your fanin is smaller than your fanout,
+but square root of the ratio, otherwise. And then this is a simple initialization
+for the scale of your Gaussian. For your learning rate, if you're doing SGD, then you set it to fanout or fanin.
+But if you're doing Adam, that's going to be slightly different. It's going to be 1 over the fanin.
+Now, in case you already know the standard like Kaiming initialization and so on, off the top of your head,
+you can mentally compare what this looks like to the standard parameterization. So in a standard parameterization, if you're doing it right, you should probably
+be already setting your Gaussian's to initialize to 1 over the square root of fanin.
+So that's good. That's already perfectly set. But your learning rates are probably being set globally to a constant.
+This is fine for SGD, not so fine for Adam where the really big difference between SP and mu P comes in.
+So OK. That brings us right back to the Cerebras-GPT paper. Now we have all the context we need to understand
+all the operations they do. If you look, once again, at the column over here of mu P,
+the embedding layer is special. It doesn't really do essentially any scaling because embeddings are one hot, so their norms
+don't scale linearly with the number of vocab elements. But ignoring that, basically you see
+that all the layers get scaled down by 1 over the width, that's the initialization rule.
+And then the learning rate rules are scaled by 1 over the width as well. So this is, once again, the learning rate rule for Adam.
+So if you're using Adam, that's exactly the right thing to do. And that's also exactly what they do in Cerebras-GPT.
+So hopefully that's clear. And hopefully this gives you a sense of both the interestingness of manipulating per layer learning
+rates to get more predictable scaling, and also maybe an appreciation of this idea of trying to control activations and updates
+as a function of model width. I'll pause for a moment there and just
+that's like a very successful idea from physics. Lots of physicists think about ideas like renormalization.
+As I take limits of certain things, I want things to remain stable. I want them to not blow up or go to 0.
+This is an exact application of that idea. That's an interesting use of that.
+Any questions about, I don't know, mu P derivation or Cerebras-GPT, or any of the other things?
+Yes. [INAUDIBLE] question about any architectural, so [INAUDIBLE] any other model.
+Yeah. So that is part of the subtlety. The question was, what's the architecture assumptions.
+Well, I mean, technically, there's an even stronger assumption here-- Oh, where did I go? There's an even stronger assumption here,
+which is that I'm assuming things are deep linear network. I'm just multiplying matrices repeatedly. This is the silliest network that you can have.
+Basically, there are arguments for why adding nonlinearities are fine. There are arguments for how you would take the same arguments
+and apply them to the attention layer. There are arguments for why much more complex things are
+needed for a gated linear unit. So each one of those architecture pieces needs a careful analysis in order
+to have a corresponding object. Yes.
+All these are like n subnetworks determined, it looks like they are indexed by data, right?
+You're right. So n sub l is just the output of a matrix multiply, and nl minus 1 is the input.
+So for example, if you have an Ml P you're going to have a matrix multiply that takes you from D model dimension to four times D model
+like the DFF dimension. So that would give you nl over nl minus 1 of 4, for example.
+So all the different matrix shapes are giving you the nl minus 1. oh, OK.
+It's like [INAUDIBLE]. The fanin and the fanout of a matrix. Yeah. [INAUDIBLE]
+Exactly. Yeah. So the input and output dimensions are determining all of these objects.
+OK. Excellent. [INAUDIBLE] is a fanin fanout the same idea.
+It's also just fanin output of the [INAUDIBLE]. Fanin and the fanout are like the input and output dimensions.
+Yeah. I was using those terms exchangeably, but I should have been a little bit more clear.
+Oh, yes. Since DeepSeek uses a global learning rate, does that mean that they don't have order-one updates?
+So the question was like, since DeepSeek uses a global learning rate, does that mean they don't have an order-one update?
+So all of this argument is asymptotic. It's basically saying, as I scale my width out to infinity,
+things will be big or small. And I mean, if you look at the mu P plot, for example,
+you do see this. You see that the learning rates have to shift as the model gets larger in order
+to compensate for the fact that the updates are getting bigger and bigger. What's empirically been seen is if you do nail the learning
+rate, you don't need mu P. It's not like mu P is necessary for you to train a good model. It's really just an attempt to try
+to keep this shift as small as possible, so you can use the same learning rate throughout scaling.
+And if you go back to DeepSeek, if you remember the scaling
+law that I was being a slight hater for, you'll see that they too have learning
+rates that go down as a function of scale in order to try to compensate for the fact that the bigger models are going to have bigger updates.
+And so to respond more directly to the question. Yes, in the case of DeepSeek, as we scale the model up,
+our activation updates will get bigger, so we have to shrink the global learning rate or we should shrink the global learning rate
+to compensate for that. Cool. OK.
+Nice questions. So that was the conceptual, somewhat mathematical components
+of mu P. Now I want to talk about the empirical aspects
+of mu P. And so I'm going to talk through a preprint, or I think this one may be published
+a column, a large scale exploration of mu transfer. And I like this because it's got a bunch of ablations.
+And I think I'm a sucker for ablation, so I'll present any paper that has large scale ablations in the course.
+And so they do-- essentially with mu P as we've described it, just look at the right hand side,
+which is the more relevant piece, they're scaling down the variances. They're scaling down the learning rates by the global width of the models M.
+And they're primarily keeping the depth fixed, which is a little bit of an unusual scaling regime
+because usually you scale depth and width together, but they really want to do a controlled experiment where they're only looking at width variations,
+and they want to see if mu precisely nails scaling in this regime.
+There's also a little bit of a weird subtlety that all of the mu P papers seem to do, which is that if you remember
+your 224N lecture, you remember that there's a scaling on the attention activations.
+You do your inner product, and then you scale it down by 1 over the square root of D. And I told
+you this was a magic constant that was the right thing to do. Mu P and other papers use 1 over D scaling instead of a 1
+over square root D for various arguments related to activation and update size stability.
+And so that's another thing that I think was worth pointing out because you might not initially think of that as being something that's related to mu P. OK.
+Architecture is mostly similar to the standard transformer stuff. And as I already mentioned before,
+they only consider width scaling. So they take a standard transformer trained autoregressively on pretraining text.
+And they want to basically make the model wider and wider and wider on the MLPs and the model residual stream
+dimensions. They're going to make that bigger and bigger and bigger. And what they want is for the optimum learning rate to remain the same as they scale the width up.
+And if it remains stable, then that's the big victory for mu P. So the game is hopefully clear to everybody.
+You just want to scale width. I want my learning rate that's optimal to stay the same.
+So question number one is, does it work? Well, the answer is yes.
+So we have different width, 128, 512, 2048. We have different learning rates across the columns.
+And the idealized strategy here is we run a sweep of learning rates at the small scale.
+I pick the smallest scale, and I scale that up, and hopefully that base learning rate remains optimal.
+And yeah, it seems rates transfer very reliably across model sizes if we're doing this somewhat
+precise width scaling. And so then I think you start asking questions
+of all right, very similar to the previous question that was just asked of OK, when does mu P break?
+So you can ask that question in theory, but you can also ask that question in practice. So I'm just going to try all modern variations
+to architectures that people do. And then I'm going to ask, does this hyperparameter transfer
+thing continue to hold under these variations or not. And the paper is quite nice because they just go through a lot of different stuff.
+They'll vary the activations. They'll vary the batch sizes, the initializations, the RMS norm gains.
+They'll even use a really exotic optimizers, like sine gradient style stuff. And then they'll also vary the regularizers.
+Which one of these prevents learning rate transfer? So the first one, which I think is probably relevant
+if you were m of looking at that deep linear network and saying, oh, no one just multiplies matrices together,
+there's nonlinearities in between. So mu P work when we change nonlinearities around. Well, SwiGLU, squared ReLU, and the baseline mu
+P approach of ReLU, all have the same minimal learning rate. So no changes at all.
+We just see that, for example, SwiGLU and squared ReLU just do better than baseline 8.
+Unsurprising agrees with a lot of what we've learned in the course.
+We might vary the batch sizes, because we know that batch sizes are going to be sensitive to scale,
+like we've seen many CPM and we've seen DeepSeek basically fit scaling loss to batch sizes to try to get what the optimum batch size was.
+Once again, we see that, as we scale up batch sizes by 4, up or down, optimum learning rates
+remain stable. What about initializations?
+There are some initializations that people vary. For example, some people set the query matrix to 0
+so that all the different items get uniform attention maybe that's more stable. Some people, the embedding layer at the very top,
+they'll scale differently based on either use standard parameterization or mu P. Maybe that matters a lot.
+Turns out neither of those do the center column. The optimum learning rate remains optimal in all of these cases.
+What is it not robust to? Well, it's not going to work for every single case.
+For example, if you add learnable gains,
+that turns out to break mu P, so you need to remove the biases. But if you remove them, the mu P works.
+If you add them back in, don't necessarily work. Similarly, you can try more exotic optimizers.
+Lion is an optimizer that takes like the sine of the gradient updates, which to me feel a little bit crazy,
+but I think this was searched-- this was found through like evolutionary search or something like this to find the fastest optimizer.
+If you use this more crazy optimizer, it really breaks down. And I think this is what you expect.
+Mu P is designed to adapt to a very particular optimizer like AdamW to control the update sizes.
+So if you're using a totally different optimizer, I don't know why you'd expect the learning rates to transfer.
+So maybe expected that this thing fails. And then finally, what is it--
+also not robust, it turns out if you really have much stronger weight decay, mu P actually starts to fail.
+And so this is one of the few significant mu P failures that are in there. A lot of the other ones are just like oh, we maybe expected that
+or that's not standard to do. Weight decay is something that you actually do. OK.
+So mu P seems generally useful. If you take standard parameterization going back
+to the baseline, you might ask like, all right, what if I just do standard baseline stuff. You can't use the same learning rate.
+The same learning rate results in significantly worse losses at 2048. Your model just blows up, gives you basically,
+degenerate losses. You would have been very sad scaling up at the same learning rate. And we see also that the learning rate
+needs to scale down predictably as a function of the width. On the other hand, even if you scale up all the way to a 10B
+parameter model, you see that the base loss remains the same. So they do one large scale experiment,
+and they see that the learning rate remains ideal at the 2 to the negative 6 level, which is a cool validation.
+So they do the whole study at a medium to small scale. They do one big hero run, and then the learning rate
+remains optimal. So the empirical results on that look somewhat promising.
+The fact that Meta used it for Llama 4 is also quite nice. But as far as I know, it's not a consensus
+that people use mu P. OK. So putting it all together, how do you scale in the wild?
+I have never trained a 70B model at super Chinchilla sizes.
+And so we're going to have to rely a lot on case studies. And we saw several examples of scaling in the wild.
+We saw people setting things like model hyperparameters, especially learning rate and batch sizes, using scaling laws.
+We saw people using things like mu P or assume stability to try to avoid search over these spaces.
+And then also, the use of things like alternative learning schedules like WSD can decrease the amount of compute
+that you need in order to fit a lot of these scaling laws. So that's all I got.
