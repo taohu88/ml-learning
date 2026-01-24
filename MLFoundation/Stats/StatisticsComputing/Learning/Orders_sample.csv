@@ -1,0 +1,31 @@
+OrderID,Customer,Email,OrderDate,Amount,Region
+1001,"Alice  ","alice@example.com",2025-01-05,"$1,200.00",North
+1002,Bob,"bob at example dot com",1/8/2025,1200,South
+1003,Charlie,charlie@example.com,08-Jan-25,"1,300.50 ",north
+1004,"Alice"," alice@example.com ",2025/01/09,1300.5,North
+1005,David,david@example.com,13/01/2025,"£1,100",East
+1006,"Eve, K","eve.k@example.com",2025-02-01,"2,450.00",West
+1007,Frank,frank@example,2025-02-03,2450,South
+1008,Grace,grace@example.com,02/04/2025,"3,000.00",East
+1009,Heidi,heidi@example.com,2025-04-05,3000.00,North
+1010,Ivan,ivan@example.com,4/6/2025,"4,500",West
+1011,Judy,"judy@@example.com","2025-04-07","4,500.00",South
+1012,Ken,ken@example.com,07-Apr-2025,"5,250.75",East
+1013,Leo,leo at example.com,2025.04.08,$5250.75,North
+1014,Mia,mia@example.com,8 Apr 2025,"6,100.00",South
+1015,Nina,nina@example.com,2025/04/09,"6,100",East
+1016,Oscar,oscar@example.com,2025-04-10,"7,200.00",West
+1017,Paul, paul@example.com ,10-04-2025,7200,North
+1018,Quinn,quinn@example.com,2025-04-11,"8,000.00",South
+1019,Rachel,rachel@example.com,11/04/2025,"8,000",East
+1020,Sam,"sam@example.com",2025-04-12,"9,250.00",West
+1021,Tina,tina[at]example.com,12/04/2025,9250,North
+1022,Uma,uma@example.com,2025-04-13,"10,000.00",South
+1023,Vic,vic@example.com,13/04/2025,"10,000",East
+1024,Wade,wade@example.com,2025-04-14,"11,300.50",West
+1025,Xena,xena@example,14/04/2025,11300.5,North
+1026,Yara,yara@example.com,2025-04-15,"12,450.00",South
+1027,Zack,zack@example.com,15/04/2025,"12,450",East
+1028,Aaron,"aaron@example.com",2025-04-16,"13,800.00",West
+1029,Bella,bella@example.com,16/04/2025,"13,800",North
+1030,Carlos,carlos@example.com,2025-04-17,"14,950.25",South
