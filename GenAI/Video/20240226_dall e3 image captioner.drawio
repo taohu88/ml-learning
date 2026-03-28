@@ -1,0 +1,37 @@
+<mxfile host="Electron" modified="2024-02-27T04:32:31.626Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/23.1.5 Chrome/120.0.6099.109 Electron/28.1.0 Safari/537.36" etag="NM1di0StbiPM6zpR81ls" version="23.1.5" type="device">
+  <diagram name="Page-1" id="ICZTJnoyWRTUDIWZzHRs">
+    <mxGraphModel dx="1100" dy="830" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mHF2kZO2cvBfEICVl-zG-1" target="mHF2kZO2cvBfEICVl-zG-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-1" value="CLIP" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="92" y="310" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mHF2kZO2cvBfEICVl-zG-2" target="mHF2kZO2cvBfEICVl-zG-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-2" value="" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/general/Image.svg;" vertex="1" parent="1">
+          <mxGeometry x="120" y="198" width="64" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mHF2kZO2cvBfEICVl-zG-5" target="mHF2kZO2cvBfEICVl-zG-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-5" value="Image Embedding" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="92" y="440" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="mHF2kZO2cvBfEICVl-zG-7" target="mHF2kZO2cvBfEICVl-zG-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-7" value="Image Captioner" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="310" y="320" width="280" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="mHF2kZO2cvBfEICVl-zG-9" value="Training Caption" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="660" y="430" width="120" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
